@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Sun, Moon, Sparkles, GraduationCap, RotateCcw, BookOpen } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Sun,
+  Moon,
+  Sparkles,
+  GraduationCap,
+  RotateCcw,
+  BookOpen,
+  Building2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -12,35 +22,49 @@ import {
 import { toast } from "sonner";
 import {
   type Course,
-  type Grade,
   type Semester,
-  GRADES,
-  GRADE_POINTS,
+  type UniversityId,
+  UNIVERSITIES,
   calcCGPA,
   calcSGPA,
-  cgpaToPercentage,
   classification,
+  getUniversity,
+  remapGrade,
   uid,
 } from "@/lib/cgpa";
 import { useTheme } from "@/hooks/use-theme";
 
-const STORAGE_KEY = "cgpa-calc-v1";
+const STORAGE_KEY = "cgpa-calc-v2";
+const UNI_KEY = "cgpa-uni-v1";
 
-const newCourse = (): Course => ({ id: uid(), name: "", credits: 3, grade: "A" });
-const newSemester = (n: number): Semester => ({
+const newCourse = (defaultGrade: string): Course => ({
+  id: uid(),
+  name: "",
+  credits: 3,
+  grade: defaultGrade,
+});
+const newSemester = (n: number, defaultGrade: string): Semester => ({
   id: uid(),
   name: `Semester ${n}`,
-  courses: [newCourse(), newCourse(), newCourse()],
+  courses: [newCourse(defaultGrade), newCourse(defaultGrade), newCourse(defaultGrade)],
 });
 
 export function CgpaCalculator() {
   const { theme, toggle } = useTheme();
-  const [semesters, setSemesters] = useState<Semester[]>([newSemester(1)]);
+  const [universityId, setUniversityId] = useState<UniversityId>("aicte");
+  const university = useMemo(() => getUniversity(universityId), [universityId]);
+  const defaultGrade = university.scale[2]?.grade ?? university.scale[0].grade;
+
+  const [semesters, setSemesters] = useState<Semester[]>([newSemester(1, defaultGrade)]);
   const [hydrated, setHydrated] = useState(false);
 
   // Hydrate from localStorage
   useEffect(() => {
     try {
+      const storedUni = localStorage.getItem(UNI_KEY) as UniversityId | null;
+      if (storedUni && UNIVERSITIES.some((u) => u.id === storedUni)) {
+        setUniversityId(storedUni);
+      }
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as Semester[];
@@ -50,14 +74,33 @@ export function CgpaCalculator() {
     setHydrated(true);
   }, []);
 
-  // Persist
+  // Persist semesters
   useEffect(() => {
     if (!hydrated) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(semesters));
   }, [semesters, hydrated]);
 
-  const cgpa = useMemo(() => calcCGPA(semesters), [semesters]);
-  const percentage = useMemo(() => cgpaToPercentage(cgpa), [cgpa]);
+  // Persist university
+  useEffect(() => {
+    if (!hydrated) return;
+    localStorage.setItem(UNI_KEY, universityId);
+  }, [universityId, hydrated]);
+
+  const handleUniversityChange = (newId: UniversityId) => {
+    const oldUni = university;
+    const newUni = getUniversity(newId);
+    setSemesters((prev) =>
+      prev.map((s) => ({
+        ...s,
+        courses: s.courses.map((c) => ({ ...c, grade: remapGrade(oldUni, newUni, c.grade) })),
+      })),
+    );
+    setUniversityId(newId);
+    toast.success(`Switched to ${newUni.shortName}`);
+  };
+
+  const cgpa = useMemo(() => calcCGPA(semesters, university), [semesters, university]);
+  const percentage = useMemo(() => university.toPercentage(cgpa), [cgpa, university]);
   const totalCredits = useMemo(
     () => semesters.flatMap((s) => s.courses).reduce((sum, c) => sum + (c.credits || 0), 0),
     [semesters],
@@ -80,7 +123,9 @@ export function CgpaCalculator() {
 
   const addCourse = (semId: string) => {
     setSemesters((prev) =>
-      prev.map((s) => (s.id === semId ? { ...s, courses: [...s.courses, newCourse()] } : s)),
+      prev.map((s) =>
+        s.id === semId ? { ...s, courses: [...s.courses, newCourse(defaultGrade)] } : s,
+      ),
     );
   };
 
@@ -93,7 +138,7 @@ export function CgpaCalculator() {
   };
 
   const addSemester = () => {
-    setSemesters((prev) => [...prev, newSemester(prev.length + 1)]);
+    setSemesters((prev) => [...prev, newSemester(prev.length + 1, defaultGrade)]);
     toast.success("Semester added");
   };
 
@@ -102,7 +147,7 @@ export function CgpaCalculator() {
   };
 
   const reset = () => {
-    setSemesters([newSemester(1)]);
+    setSemesters([newSemester(1, defaultGrade)]);
     localStorage.removeItem(STORAGE_KEY);
     toast.success("Reset complete");
   };
@@ -136,7 +181,7 @@ export function CgpaCalculator() {
                 <span className="gradient-text">CGPA</span> Calculator
               </h1>
               <p className="text-xs text-muted-foreground sm:text-sm">
-                Built for Indian engineering students · 10-point scale
+                Indian engineering · {university.shortName}
               </p>
             </div>
           </div>
@@ -162,6 +207,42 @@ export function CgpaCalculator() {
           </div>
         </header>
 
+        {/* University selector */}
+        <section
+          className="glass mb-6 flex flex-col gap-3 rounded-2xl p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5 animate-fade-up"
+          style={{ animationDelay: "0.05s" }}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className="flex h-10 w-10 items-center justify-center rounded-xl text-primary-foreground"
+              style={{ background: "var(--gradient-accent)" }}
+            >
+              <Building2 className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                Grading System
+              </p>
+              <p className="text-sm font-semibold">{university.name}</p>
+            </div>
+          </div>
+          <Select value={universityId} onValueChange={(v) => handleUniversityChange(v as UniversityId)}>
+            <SelectTrigger className="w-full border-0 bg-background/50 sm:w-72">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {UNIVERSITIES.map((u) => (
+                <SelectItem key={u.id} value={u.id}>
+                  <span className="flex items-center justify-between gap-3">
+                    <span className="font-semibold">{u.shortName}</span>
+                    <span className="text-xs text-muted-foreground">{u.name}</span>
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </section>
+
         {/* Result hero */}
         <section
           className="glass relative mb-6 overflow-hidden rounded-3xl p-6 sm:p-10 animate-fade-up"
@@ -180,7 +261,7 @@ export function CgpaCalculator() {
                 <span className="text-6xl font-bold tabular-nums gradient-text sm:text-7xl">
                   {cgpa.toFixed(2)}
                 </span>
-                <span className="text-xl text-muted-foreground">/10</span>
+                <span className="text-xl text-muted-foreground">/{university.scaleMax}</span>
               </div>
               <div
                 className={`mt-3 inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r ${status.tone} px-3 py-1 text-xs font-semibold text-white shadow-lg`}
@@ -201,7 +282,7 @@ export function CgpaCalculator() {
         {/* Semesters */}
         <div className="space-y-5">
           {semesters.map((sem, idx) => {
-            const sgpa = calcSGPA(sem.courses);
+            const sgpa = calcSGPA(sem.courses, university);
             const semCredits = sem.courses.reduce((s, c) => s + (c.credits || 0), 0);
             return (
               <section
@@ -252,7 +333,6 @@ export function CgpaCalculator() {
 
                 {/* Course list */}
                 <div className="space-y-2">
-                  {/* Header row (desktop) */}
                   <div className="hidden grid-cols-12 gap-2 px-2 pb-1 text-[10px] font-mono uppercase tracking-wider text-muted-foreground sm:grid">
                     <div className="col-span-6">Course</div>
                     <div className="col-span-2">Credits</div>
@@ -289,20 +369,18 @@ export function CgpaCalculator() {
                       <div className="col-span-6 sm:col-span-3">
                         <Select
                           value={course.grade}
-                          onValueChange={(v) =>
-                            updateCourse(sem.id, course.id, { grade: v as Grade })
-                          }
+                          onValueChange={(v) => updateCourse(sem.id, course.id, { grade: v })}
                         >
                           <SelectTrigger className="h-10 w-full border-0 bg-background/50 font-semibold">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {GRADES.map((g) => (
-                              <SelectItem key={g} value={g}>
+                            {university.scale.map((g) => (
+                              <SelectItem key={g.grade} value={g.grade}>
                                 <span className="flex items-center justify-between gap-3">
-                                  <span className="font-bold">{g}</span>
+                                  <span className="font-bold">{g.grade}</span>
                                   <span className="font-mono text-xs text-muted-foreground">
-                                    {GRADE_POINTS[g]} pts
+                                    {g.points} pts
                                   </span>
                                 </span>
                               </SelectItem>
@@ -344,7 +422,7 @@ export function CgpaCalculator() {
         </Button>
 
         <footer className="mt-10 text-center text-xs text-muted-foreground">
-          Saved locally on your device · Percentage = (CGPA − 0.75) × 10
+          Saved locally on your device · Percentage = {university.percentageFormula}
         </footer>
       </div>
     </div>
