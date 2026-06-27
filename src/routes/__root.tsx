@@ -72,14 +72,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
+      { title: "CGPA Calculator for Indian Engineering Students" },
+      { name: "description", content: "Free CGPA, SGPA, GPA, and percentage calculator for Indian engineering colleges. Supports JNTUH, VTU, Anna University, Mumbai University, AICTE grading systems" },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { property: "og:title", content: "CGPA Calculator for Indian Engineering Students" },
+      { property: "og:description", content: "Free CGPA, SGPA, GPA, and percentage calculator for Indian engineering colleges. Supports JNTUH, VTU, Anna University, Mumbai University, AICTE grading systems" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "CGPA Calculator for Indian Engineering Students" },
+      { name: "twitter:description", content: "Free CGPA, SGPA, GPA, and percentage calculator for Indian engineering colleges. Supports JNTUH, VTU, Anna University, Mumbai University, AICTE grading systems" },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/95c75f61-1e87-4a09-9c50-5890d662d0b1" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/95c75f61-1e87-4a09-9c50-5890d662d0b1" },
     ],
     links: [
       {
